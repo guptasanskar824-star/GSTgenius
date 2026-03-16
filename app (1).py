@@ -281,24 +281,81 @@ def get_sample():
 
 def check_compliance(df):
     results = []
-    col = "Category" if "Category" in df.columns else df.columns[4]
-    amt_col = next((c for c in df.columns if "Amount" in c or "amount" in c or "Value" in c or "value" in c), df.columns[5])
-    gst_col = next((c for c in df.columns if "GST" in c and "%" in c), df.columns[6])
+    VALID_RATES = [0, 5, 12, 18, 28]
+    # Smart column detection
+    amt_col = next((c for c in df.columns if any(x in c.lower() for x in ["taxable","amount","value"])), df.columns[5])
+    gst_col = next((c for c in df.columns if "gst" in c.lower() and any(x in c.lower() for x in ["rate","_","%"])), df.columns[6])
+    inv_col = next((c for c in df.columns if any(x in c.lower() for x in ["invoice","inv","bill","voucher"])), df.columns[0])
+    party_col = next((c for c in df.columns if any(x in c.lower() for x in ["party","supplier","vendor","name","customer","buyer"])), df.columns[2])
+    cat_col = next((c for c in df.columns if any(x in c.lower() for x in ["category","item","description","goods","product","service","particulars"])), None)
+    state_col = next((c for c in df.columns if "state" in c.lower()), None)
+    cgst_col = next((c for c in df.columns if c.upper() == "CGST" or c.lower() == "cgst"), None)
+    sgst_col = next((c for c in df.columns if c.upper() == "SGST" or c.lower() == "sgst"), None)
+    igst_col = next((c for c in df.columns if c.upper() == "IGST" or c.lower() == "igst"), None)
+    total_col = next((c for c in df.columns if "total" in c.lower() and ("invoice" in c.lower() or "value" in c.lower())), None)
+
     for _, row in df.iterrows():
-        cat = str(row[col]).lower().strip()
-        gst = float(row[gst_col])
-        amt = float(row[amt_col])
-        exp = GST_RULES.get(cat, None)
-        if exp is None: status, flag = "Unknown Category — Verify Manually", "unknown"
-        elif gst == exp: status, flag = "Compliant", "correct"
-        else: status, flag = f"Non-Compliant — Correct Rate: {exp}%", "wrong"
+        try:
+            gst = float(row[gst_col])
+            amt = float(row[amt_col])
+        except:
+            continue
+
+        inv = str(row[inv_col])
+        party = str(row[party_col])
+        state = str(row[state_col]) if state_col else "-"
+        cat = str(row[cat_col]).lower().strip() if cat_col else None
+        cgst_amt = float(row[cgst_col]) if cgst_col and pd.notna(row[cgst_col]) else 0
+        sgst_amt = float(row[sgst_col]) if sgst_col and pd.notna(row[sgst_col]) else 0
+        igst_amt = float(row[igst_col]) if igst_col and pd.notna(row[igst_col]) else 0
+        total_declared = float(row[total_col]) if total_col and pd.notna(row[total_col]) else 0
+        actual_tax = round(cgst_amt + sgst_amt + igst_amt, 2)
+        expected_tax = round(amt * gst / 100, 2)
+        expected_total = round(amt + expected_tax, 2)
+
+        issues = []
+        flag = "correct"
+
+        # Check 1 — Invalid GST slab
+        if gst not in VALID_RATES:
+            issues.append(f"Invalid GST slab: {gst}% — Valid slabs are 0/5/12/18/28")
+            flag = "wrong"
+
+        # Check 2 — Tax math mismatch
+        if actual_tax > 0 and abs(actual_tax - expected_tax) > 1:
+            issues.append(f"Tax mismatch: Declared Rs {actual_tax:,.2f} vs Computed Rs {expected_tax:,.2f}")
+            flag = "wrong"
+
+        # Check 3 — Total invoice mismatch
+        if total_declared > 0 and abs(total_declared - expected_total) > 1:
+            issues.append(f"Invoice total mismatch: Declared Rs {total_declared:,.2f} vs Computed Rs {expected_total:,.2f}")
+            flag = "wrong"
+
+        # Check 4 — Both IGST and CGST charged
+        if igst_amt > 0 and cgst_amt > 0:
+            issues.append("Both IGST and CGST charged on same invoice — not permitted")
+            flag = "wrong"
+
+        # Check 5 — Category rate validation
+        if cat and cat in GST_RULES:
+            exp_rate = GST_RULES[cat]
+            if gst != exp_rate:
+                issues.append(f"Wrong rate for {cat.title()}: Applied {gst}% but correct rate is {exp_rate}%")
+                flag = "wrong"
+
+        if flag == "correct":
+            status = "Tax Math Verified — Valid GST Slab" if not (cat and cat in GST_RULES) else "Fully Compliant"
+        else:
+            status = " | ".join(issues)
+
         results.append({
-            "Invoice No": row.get("Invoice No", "-"),
-            "Item": row.get("Item Description", row.get("Item", "-")),
+            "Invoice No": inv,
+            "Party Name": party,
+            "State": state,
             "Taxable Amount (Rs)": amt,
-            "GST Applied (%)": gst,
-            "Correct GST (%)": exp if exp is not None else "Verify",
-            "GST Amount (Rs)": round(amt * gst / 100, 2),
+            "GST Rate (%)": gst,
+            "Expected Tax (Rs)": expected_tax,
+            "Actual Tax (Rs)": actual_tax if actual_tax > 0 else expected_tax,
             "Compliance Status": status,
             "Flag": flag
         })
