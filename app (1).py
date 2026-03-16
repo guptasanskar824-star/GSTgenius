@@ -317,9 +317,13 @@ def header(title, sub):
     </div>""", unsafe_allow_html=True)
 
 def color_rows(row):
-    if row["Flag"] == "wrong": return ["background-color:#fff1f2;color:#9f1239"] * len(row)
-    elif row["Flag"] == "correct": return ["background-color:#f0fdf4;color:#14532d"] * len(row)
-    else: return ["background-color:#fffbeb;color:#78350f"] * len(row)
+    status = str(row.get("Compliance Status", row.get("Status", "")))
+    if "Non-Compliant" in status or "Wrong" in status or "wrong" in status:
+        return ["background-color:#fff1f2;color:#9f1239"] * len(row)
+    elif "Compliant" in status and "Non" not in status:
+        return ["background-color:#f0fdf4;color:#14532d"] * len(row)
+    else:
+        return ["background-color:#fffbeb;color:#78350f"] * len(row)
 
 # ── LOGO & SIDEBAR ────────────────────────────────────────────
 with st.sidebar:
@@ -528,7 +532,7 @@ elif page == "GST Rate Checker":
             c1.metric("Total Transactions", len(df))
             c2.metric("Compliant", correct)
             c3.metric("Non-Compliant", wrong)
-            st.dataframe(display.style.apply(color_rows,axis=1), use_container_width=True)
+            st.dataframe(display, use_container_width=True)
             st.download_button("Download Report", to_excel(display), "compliance_report.xlsx")
         st.markdown("</div>", unsafe_allow_html=True)
 
