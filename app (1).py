@@ -282,8 +282,8 @@ def get_sample():
 def check_compliance(df):
     results = []
     col = "Category" if "Category" in df.columns else df.columns[4]
-    amt_col = [c for c in df.columns if "Amount" in c or "amount" in c][0]
-    gst_col = [c for c in df.columns if "GST" in c and "%" in c][0]
+    amt_col = next((c for c in df.columns if "Amount" in c or "amount" in c or "Value" in c or "value" in c), df.columns[5])
+    gst_col = next((c for c in df.columns if "GST" in c and "%" in c), df.columns[6])
     for _, row in df.iterrows():
         cat = str(row[col]).lower().strip()
         gst = float(row[gst_col])
@@ -837,7 +837,7 @@ elif page == "Analytics":
         df = pd.read_excel(uploaded) if uploaded.name.endswith("xlsx") else pd.read_csv(uploaded)
         results_df = check_compliance(df)
         amt_col = [c for c in df.columns if "Amount" in c][0]
-        gst_col = [c for c in df.columns if "GST" in c and "%" in c][0]
+        gst_col = next((c for c in df.columns if "GST" in c and "%" in c), df.columns[6])
         c1,c2 = st.columns(2)
         with c1:
             fig = px.bar(df, x=df.columns[3], y=amt_col, title="Transaction Value Distribution", color_discrete_sequence=["#1e3a5f"])
