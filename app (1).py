@@ -463,7 +463,7 @@ if page == "Dashboard":
         correct = len(results_df[results_df["Flag"]=="correct"])
         wrong = len(results_df[results_df["Flag"]=="wrong"])
         unknown = len(results_df[results_df["Flag"]=="unknown"])
-        total_gst = results_df["GST Amount (Rs)"].sum()
+     total_gst = results_df["Actual Tax (Rs)"].sum()
         score = int((correct/len(results_df))*100) if len(results_df)>0 else 0
 
         c1,c2,c3,c4,c5 = st.columns(5)
